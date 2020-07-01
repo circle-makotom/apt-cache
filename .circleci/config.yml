@@ -1,0 +1,42 @@
+version: 2
+
+jobs:
+  build:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-deb-cache-{{ checksum ".circleci/config.yml" }}
+            - v1-deb-cache
+      - run:
+          name: Manipulate hooks for APT to preserve cache
+          command: |
+            # Remove preinstalled hook to clean-up caches
+            sudo rm /etc/apt/apt.conf.d/docker-clean
+            # Add a hook to keep downloaded packages
+            sudo bash -c 'echo "Binary::apt::APT::Keep-Downloaded-Packages \\"1\\";" >> /etc/apt/apt.conf.d/99keep-downloaded'
+      - run:
+          name: Restore APT cache
+          command: |
+            # Create apt-cache directory in case restore_cache restored nothing
+            mkdir -p /tmp/apt-cache
+            # Remove existing cache
+            sudo rm -r /var/cache/apt
+            # Deploy cache from restore_cache
+            sudo mv /tmp/apt-cache /var/cache/apt
+            # apt update just in case
+            sudo apt update
+      - run:
+          name: Some arbitrary APT-related operations with cache
+          command: |
+            sudo apt install -y gimp
+            sudo apt install -y firefox
+      - run:
+          name: Copy APT cache to tmp
+          command: sudo cp -r /var/cache/apt /tmp/apt-cache
+      - save_cache:
+          key: v1-deb-cache-{{ checksum ".circleci/config.yml" }}
+          paths:
+            - /tmp/apt-cache
